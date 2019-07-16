@@ -1,0 +1,13 @@
+# port to open for your Docker container for Jupyter purposes
+JUPYTER_PORT=8890
+
+# Zillow web services id
+ZILLOW_WSID=
+
+# Docker container working directory (the current directory maps to this)
+DOCKER_WORKDIR=/data
+
+# (for Docker Hub purposes only)
+# Docker username and Hub repository name
+DOCKER_USERNAME=aagnone
+DOCKER_REPO=bay-area

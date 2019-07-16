@@ -1,0 +1,9 @@
+folium
+numpy
+pandas
+matplotlib
+seaborn
+untangle
+xmltodict
+tqdm
+jupyterlab
