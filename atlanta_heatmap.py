@@ -160,10 +160,13 @@ def main():
             # iterate until we have reached the desired condition
             if len(node_data) >= size_target:
                 msg = 'Desired # elements reached'
+                done = True
             elif n_iter == max_iter:
                 msg = 'Maximum # iterations reached'
+                done = True
             elif len(homes) == 0:
                 msg = 'All homes traversed/dead end reached.'
+                done = True
             # randomly print out how many homes we've found
             elif np.random.normal() < -2:
                 print('# of homes found: [}'.format(len(node_data)))
