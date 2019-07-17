@@ -1,7 +1,7 @@
 import os
 import pickle
 import requests
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 import folium
 import xmltodict
@@ -104,102 +104,105 @@ def meets_criteria(home):
     return val
 
 
-# set to True to generate a new heatmap for a city
-data_fn = 'data/data.pkl'
-generate_new = False
+def main():
+    # set to True to generate a new heatmap for a city
+    data_fn = 'data/data.pkl'
+    out_fn = 'atlanta_heatmap.html'
+    generate_new = False
 
-if generate_new:
-    node_map = dict()
-    all_nodes = set()
-    node_data = dict()
-    city = 'Atlanta'
-    state = 'GA'
-    print('City: {}'.format(city))
-    i = 0
-    n_iter = 0
-    max_iter = np.inf
-    size_target = 10000
+    if generate_new:
+        node_map = defaultdict(list)
+        all_nodes = set()
+        node_data = dict()
+        msg = ''
+        city = 'Atlanta'
+        state = 'GA'
+        print('City: {}'.format(city))
+        n_iter = 0
+        max_iter = np.inf
+        size_target = 10000
 
-    # get initial results to seed the graph
-    homes = get_search_results(
-        address=city,
-        city_state='{city}+{state}'.format(city=city, state=state)
+        # get initial results to seed the graph
+        homes = get_search_results(
+            address=city,
+            city_state='{city}+{state}'.format(city=city, state=state)
+        )
+        if len(homes) == 0:
+            raise ValueError('No results found for city {}.'.format(city))
+
+        for home in homes:
+            node_data[home.zpid] = home
+
+        done = False
+        while len(homes) > 0 and not done:
+            n_iter += 1
+
+            home = homes.pop(-1)
+
+            comps = get_comps(home.zpid)
+            for comp in comps:
+
+                if comp.zpid not in all_nodes:
+
+                    if meets_criteria(comp):
+                        # add to set of all nodes
+                        all_nodes.add(comp.zpid)
+
+                        # add to the queue
+                        homes.append(comp)
+
+                        # add to the id -> home info mapping
+                        node_data[comp.zpid] = comp
+
+                # add to the id -> comps mapping
+                node_map[home.zpid].append(comp.zpid)
+
+            # iterate until we have reached the desired condition
+            if len(node_data) >= size_target:
+                msg = 'Desired # elements reached'
+            elif n_iter == max_iter:
+                msg = 'Maximum # iterations reached'
+            elif len(homes) == 0:
+                msg = 'All homes traversed/dead end reached.'
+            # randomly print out how many homes we've found
+            elif np.random.normal() < -2:
+                print('# of homes found: [}'.format(len(node_data)))
+
+            if done:
+                print(msg)
+                print('Found {} homes.'.format(len(homes)))
+
+        with open(data_fn, 'wb') as fp:
+            pickle.dump({'node_data': node_data, 'node_map': node_map}, fp)
+    else:
+        with open(data_fn, 'rb') as fp:
+            data = pickle.load(fp)
+        node_data, node_map = data['node_data'], data['node_map']
+
+    print('# houses: {}'.format(len(node_data)))
+
+    data = np.array([
+        [home_info.lat, home_info.lon, home_info.value]
+        for home_info in node_data.values()
+    ])
+
+    m = folium.Map(
+        location=data[:, :2].mean(axis=0),
+        control_scale=True,
+        zoom_start=11
     )
-    if len(homes) == 0:
-        raise ValueError('No results found for city {}.'.format(city))
 
-    for home in homes:
-        node_data[home.zpid] = home
+    radius = 10
+    hm = HeatMap(
+        data,
+        radius=radius,
+        blur=int(2 * radius)
+    )
+    hm.add_to(m)
 
-    done = False
-    while len(homes) > 0 and not done:
-        n_iter += 1
+    m.save(out_fn)
+    print('View the map with a browser by opening {}.'.format(out_fn))
 
-        home = homes.pop(-1)
 
-        comps = get_comps(home.zpid)
-        for comp in comps:
-
-            if comp.zpid not in all_nodes:
-
-                if meets_criteria(comp):
-                    # add to set of all nodes
-                    all_nodes.add(comp.zpid)
-
-                    # add to the queue
-                    homes.append(comp)
-
-                    # add to the id -> home info mapping
-                    node_data[comp.zpid] = comp
-
-            # add to the id -> comps mapping
-            if home.zpid not in node_map:
-                node_map[home.zpid] = list()
-            node_map[home.zpid].append(comp.zpid)
-
-        # iterate until we have reached the desired condition
-        if len(node_data) >= size_target:
-            print('Desired # elements reached')
-            done = True
-            print(len(node_data), len(homes))
-        elif n_iter == max_iter:
-            print('Maximum # iterations reached')
-            done = True
-            print(len(node_data), len(homes))
-        elif len(homes) == 0:
-            print('All homes traversed/dead end reached.')
-            done = True
-            print(len(node_data), len(homes))
-        # randomly print out how many homes we've found
-        elif np.random.normal() < -2:
-            print(len(node_data))
-
-    with open(data_fn, 'wb') as fp:
-        pickle.dump({'node_data': node_data, 'node_map': node_map}, fp)
-else:
-    with open(data_fn, 'rb') as fp:
-        data = pickle.load(fp)
-    node_data, node_map = data['node_data'], data['node_map']
-
-print('# houses: {}'.format(len(node_data)))
-
-data = np.array([
-    [home.lat, home.lon, home.value]
-    for home in node_data.values()
-])
-
-m = folium.Map(
-    location=data[:, :2].mean(axis=0),
-    control_scale=True,
-    zoom_start=11
-)
-
-radius = 10
-hm = HeatMap(
-    data,
-    radius=radius,
-    blur=int(2 * radius)
-)
-hm.add_to(m)
-
-m.save('atlanta_heatmap.html')
+if __name__ == '__main__':
+    main()
